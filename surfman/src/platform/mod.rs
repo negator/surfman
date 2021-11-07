@@ -9,11 +9,11 @@ pub mod android;
 #[cfg(android)]
 pub use android as default;
 
-#[cfg(macos)]
+#[cfg(any(macos, ios))]
 pub mod macos;
-#[cfg(macos)]
+#[cfg(any(macos, ios))]
 pub use macos::cgl as default;
-#[cfg(macos)]
+#[cfg(any(macos, ios))]
 pub use macos::system;
 
 #[cfg(linux)]

@@ -57,7 +57,7 @@ gl = "0.14"
 png = "0.15"
 rand = "0.7"
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 cgl = "0.3.2"
 cocoa = "0.19"
 core-foundation = "0.6"
@@ -68,11 +68,11 @@ mach = "0.3"
 metal = "0.18"
 objc = "0.2"
 
-[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android"))))'.dependencies.wayland-sys]
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies.wayland-sys]
 version = "0.24"
 features = ["client", "dlopen", "egl"]
 
-[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android"))))'.dependencies.x11]
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies.x11]
 version = "2.3.0"
 features = ["xlib"]
 optional = true

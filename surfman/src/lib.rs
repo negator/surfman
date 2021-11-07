@@ -18,7 +18,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "macos", target_os = "ios",)]
 #[macro_use]
 extern crate objc;
 
@@ -29,11 +29,11 @@ pub use platform::default::device::{Adapter, Device, NativeDevice};
 pub use platform::default::surface::{NativeWidget, Surface, SurfaceTexture};
 
 // TODO(pcwalton): Fill this in with other OS's.
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "macos", target_os = "ios",)]
 pub use platform::system::connection::Connection as SystemConnection;
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "macos", target_os = "ios",)]
 pub use platform::system::device::{Adapter as SystemAdapter, Device as SystemDevice};
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "macos", target_os = "ios",)]
 pub use platform::system::surface::Surface as SystemSurface;
 
 pub mod connection;

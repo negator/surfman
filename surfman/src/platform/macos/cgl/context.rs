@@ -1,4 +1,4 @@
-// surfman/surfman/src/platform/macos/cgl/context.rs
+// surfman/surfman/src/platform/ios/cgl/context.rs
 //
 //! Wrapper for Core OpenGL contexts.
 

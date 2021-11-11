@@ -17,6 +17,7 @@ use core_foundation::dictionary::{CFMutableDictionary, CFMutableDictionaryRef};
 use core_foundation::string::CFString;
 
 use euclid::default::Size2D;
+use crate::GLApi;
 
 use std::os::raw::c_void;
 use std::str::FromStr;
@@ -75,6 +76,12 @@ impl Connection {
     #[inline]
     pub fn native_connection(&self) -> NativeConnection {
         NativeConnection
+    }
+
+    /// Returns the OpenGL API flavor that this connection supports (OpenGL or OpenGL ES).
+    #[inline]
+    pub fn gl_api(&self) -> GLApi {
+        GLApi::GLES
     }
 
     /// Returns the "best" adapter on this system, preferring high-performance hardware adapters.

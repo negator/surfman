@@ -7,6 +7,7 @@ use crate::Error;
 
 use metal::Device as MetalDevice;
 use std::marker::PhantomData;
+use crate::GLApi;
 
 /// Represents a hardware display adapter that can be used for rendering (including the CPU).
 ///
@@ -59,5 +60,11 @@ impl Device {
     #[inline]
     pub fn adapter(&self) -> Adapter {
         self.adapter.clone()
+    }
+
+    /// Returns the OpenGL API flavor that this device supports (OpenGL or OpenGL ES).
+    #[inline]
+    pub fn gl_api(&self) -> GLApi {
+        GLApi::GLES
     }
 }

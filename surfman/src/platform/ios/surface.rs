@@ -7,9 +7,10 @@ use super::device::Device;
 use super::ffi::{kCVPixelFormatType_32BGRA, kIOMapDefaultCache, IOSurfaceLock, IOSurfaceUnlock};
 use super::ffi::{kIOMapWriteCombineCache};
 use super::ffi::{IOSurfaceGetAllocSize, IOSurfaceGetBaseAddress, IOSurfaceGetBytesPerRow};
-use crate::{Error, SurfaceAccess, SurfaceID, SurfaceType, SurfaceInfo};
+use crate::{gl, Error, SurfaceAccess, SurfaceID, SurfaceType, SurfaceInfo};
 use crate::context::ContextID;
 
+use crate::gl::types::{GLenum, GLint, GLuint};
 use core_foundation::base::TCFType;
 use core_foundation::dictionary::CFDictionary;
 use core_foundation::number::CFNumber;
@@ -26,6 +27,8 @@ use std::thread;
 
 const BYTES_PER_PIXEL: i32 = 4;
 
+const SURFACE_GL_TEXTURE_TARGET: GLenum = gl::TEXTURE_RECTANGLE;
+
 /// Represents a hardware buffer of pixels that can be rendered to via the CPU or GPU and either
 /// displayed in a native widget or bound to a texture for reading.
 ///
@@ -37,6 +40,7 @@ const BYTES_PER_PIXEL: i32 = 4;
 /// Depending on the platform, each surface may be internally double-buffered.
 ///
 /// Surfaces must be destroyed with the `destroy_surface()` method, or a panic will occur.
+///
 pub struct Surface {
     pub(crate) context_id: ContextID,
     pub(crate) io_surface: IOSurface,
@@ -47,7 +51,7 @@ pub struct Surface {
 
 pub struct SurfaceTexture {
     pub(crate) surface: Surface,
-    // pub(crate) texture_object: GLuint,
+    pub(crate) texture_object: GLuint,
     pub(crate) phantom: PhantomData<*const ()>,
 }
 
@@ -122,6 +126,22 @@ impl Device {
         Ok(())
     }
 
+    /// Returns the OpenGL texture target needed to read from this surface texture.
+    ///
+    /// This will be `GL_TEXTURE_2D` or `GL_TEXTURE_RECTANGLE`, depending on platform.
+    #[inline]
+    pub fn surface_gl_texture_target(&self) -> GLenum {
+        SURFACE_GL_TEXTURE_TARGET
+    }
+
+    /// Returns the OpenGL texture object containing the contents of this surface.
+    ///
+    /// It is only legal to read from, not write to, this texture object.
+    #[inline]
+    pub fn surface_texture_object(&self, surface_texture: &SurfaceTexture) -> GLuint {
+        surface_texture.texture_object
+    }
+
     /// Displays the contents of a widget surface on screen.
     ///
     /// Widget surfaces are internally double-buffered, so changes to them don't show up in their
@@ -131,7 +151,7 @@ impl Device {
     }
 
     /// Resizes a widget surface
-    pub fn resize_surface(&self, context: &Context, surface: &mut Surface, mut size: Size2D<i32>) -> Result<(), Error> {
+    pub fn resize_surface(&self, context: &Context, surface: &mut Surface, size: Size2D<i32>) -> Result<(), Error> {
         // noop
         Ok(())
     }
@@ -203,6 +223,22 @@ impl Device {
         let io_surface_ref = io_surface.as_concrete_TypeRef();
         mem::forget(io_surface);
         NativeSurface(io_surface_ref)
+    }
+
+    pub fn create_surface_texture(
+         &self,
+         context: &mut Context,
+         surface: Surface,
+     ) -> Result<SurfaceTexture, (Error, Surface)> {
+        Err((Error::UnsupportedOnThisPlatform, surface)) 
+    }
+
+    pub fn destroy_surface_texture (
+         &self,
+         context: &mut Context,
+         surface_texture: SurfaceTexture,
+     ) -> Result<Surface, (Error, SurfaceTexture)> {
+        Err((Error::UnsupportedOnThisPlatform, surface_texture))
     }
 }
 

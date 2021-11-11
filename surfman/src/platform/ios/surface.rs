@@ -49,6 +49,7 @@ pub struct Surface {
     pub(crate) destroyed: bool,
 }
 
+#[derive(Debug)]
 pub struct SurfaceTexture {
     pub(crate) surface: Surface,
     pub(crate) texture_object: GLuint,

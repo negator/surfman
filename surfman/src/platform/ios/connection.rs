@@ -1,6 +1,5 @@
 // surfman/surfman/src/platform/ios/system/connection.rs
 //
-//! Represents the connection to the Core Graphics window server.
 //!
 //! Connection types are zero-sized on iOS, because the system APIs automatically manage the
 //! global window server connection.

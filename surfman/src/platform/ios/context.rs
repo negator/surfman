@@ -16,10 +16,31 @@ use glutin::{
     Context as GlutinContext, ContextBuilder, ContextError, ContextCurrentState, CreationError, GlProfile, GlRequest, NotCurrent,
     RawContext, PossiblyCurrent
 };
+use core_foundation::base::TCFType;
+use core_foundation::bundle::CFBundleGetBundleWithIdentifier;
+use core_foundation::bundle::CFBundleGetFunctionPointerForName;
+use core_foundation::bundle::CFBundleRef;
+use core_foundation::string::CFString;
 use std::mem;
 use std::os::raw::c_void;
+use std::str::FromStr;
+
+static OPENGLES_FRAMEWORK_IDENTIFIER: &'static str = "com.apple.opengles";
+thread_local! {
+    static OPENGLES_FRAMEWORK: CFBundleRef = {
+        unsafe {
+            let framework_identifier: CFString =
+                FromStr::from_str(OPENGLES_FRAMEWORK_IDENTIFIER).unwrap();
+            let framework =
+                CFBundleGetBundleWithIdentifier(framework_identifier.as_concrete_TypeRef());
+            assert!(!framework.is_null());
+            framework
+        }
+    };
+}
 
 #[derive(Debug)]
+#[allow(non_camel_case_types)]
 pub enum ContextInner {
     NoGlutinContext,
     Not(GlutinContext<NotCurrent>),
@@ -42,16 +63,19 @@ pub struct Context {
 
 impl Context {
     pub unsafe fn make_current(&self) {
+        println!("Make current: {:?}", self.id);
         let inner = self.glutin_ctx.take();
         let context = match inner {
             ContextInner::Possibly(c) => c.make_current().unwrap(),
             ContextInner::Not(c) => c.make_current().unwrap(),
             NoGlutinContext => panic!("Context not current"),
         };
+        println!("Made current: {:?}", context);
         self.glutin_ctx.replace(ContextInner::Possibly(context));
     }
 
     pub unsafe fn make__not_current(&self) {
+        println!("Make not current: {:?}", self.id);
         let inner = self.glutin_ctx.take();
         let context = match inner {            
             ContextInner::Possibly(c) => c.make_not_current().unwrap(),
@@ -63,10 +87,15 @@ impl Context {
 
     pub fn get_proc_address(&self, symbol_name: &str) -> *const c_void {
         let inner = self.glutin_ctx.take();
-        match inner {
-            ContextInner::Possibly(c) => c.get_proc_address(symbol_name),
-            _ => panic!("Context not current"),
-        }
+        let c = match inner {
+            ContextInner::Possibly(c) => {
+                let addr =  c.get_proc_address(symbol_name);
+                self.glutin_ctx.replace(ContextInner::Possibly(c));
+                addr
+            },
+            _                         => panic!("Context not current: {:?}", inner),
+        };        
+        c
     }
 
     // pub fn get_current_context(&self) -> Option<&WindowedContext<PossiblyCurrent>> {

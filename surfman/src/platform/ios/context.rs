@@ -10,12 +10,9 @@ use crate::info::GLVersion;
 use crate::context::{ContextID, CREATE_CONTEXT_MUTEX};
 use crate::{ContextAttributes, Error, WindowingApiError, Gl, SurfaceInfo};
 use crate::surface::Framebuffer;
-use glutin::dpi::PhysicalSize;
-use glutin::event_loop::EventLoop;
-use glutin::{
-    Context as GlutinContext, ContextBuilder, ContextError, ContextCurrentState, CreationError, GlProfile, GlRequest, NotCurrent,
-    RawContext, PossiblyCurrent
-};
+
+use glutin_gles2_sys as ffi;
+use objc::runtime::{Class, Object, Sel, BOOL, NO, YES};
 use core_foundation::base::TCFType;
 use core_foundation::bundle::CFBundleGetBundleWithIdentifier;
 use core_foundation::bundle::CFBundleGetFunctionPointerForName;
@@ -39,71 +36,78 @@ thread_local! {
     };
 }
 
-#[derive(Debug)]
-#[allow(non_camel_case_types)]
-pub enum ContextInner {
-    NoGlutinContext,
-    Not(GlutinContext<NotCurrent>),
-    Possibly(GlutinContext<PossiblyCurrent>),
-}
-
-impl Default for ContextInner {
-    fn default() -> ContextInner {
-        ContextInner::NoGlutinContext
-    }
-}
-
-
 pub struct Context {
     pub(crate) id: ContextID,
-    pub(crate) glutin_ctx: RefCell<ContextInner>,
+    pub(crate) eagl_context: ffi::id,
     pub(crate) gl_version: GLVersion,
     framebuffer: Framebuffer<Surface, ()>,
 }
 
+impl Drop for Context {
+    fn drop(&mut self) {
+        let _: () = unsafe { msg_send![self.eagl_context, release] };
+    }
+}
+
 impl Context {
-    pub unsafe fn make_current(&self) {
-        println!("Make current: {:?}", self.id);
-        let inner = self.glutin_ctx.take();
-        let context = match inner {
-            ContextInner::Possibly(c) => c.make_current().unwrap(),
-            ContextInner::Not(c) => c.make_current().unwrap(),
-            NoGlutinContext => panic!("Context not current"),
-        };
-        println!("Made current: {:?}", context);
-        self.glutin_ctx.replace(ContextInner::Possibly(context));
+
+    pub unsafe fn create_context(mut version: ffi::NSUInteger, descriptor: &ContextDescriptor) -> Result<Context, Error> {
+        let context_class = Class::get("EAGLContext").expect("Failed to get class `EAGLContext`");
+        let eagl_context: ffi::id = msg_send![context_class, alloc];
+        let mut valid_context = ffi::nil;
+        while valid_context == ffi::nil && version > 0 {
+            valid_context = msg_send![eagl_context, initWithAPI: version];
+            version -= 1;
+        }
+        
+        if valid_context == ffi::nil {
+            info!("Could not create context with gl version: {:?}", descriptor.gl_version);
+            Err(Error::Failed)
+        } else {
+            info!("Creating context with gl version: {:?}", version);
+            let mut next_context_id = CREATE_CONTEXT_MUTEX.lock().unwrap();
+            let ctx = Context {
+                id: *next_context_id,
+                eagl_context: valid_context,
+                gl_version: descriptor.gl_version,
+                framebuffer: Framebuffer::None,
+            };
+
+            next_context_id.0 += 1;
+            Ok(ctx)
+        }        
+    }
+    pub unsafe fn make_current(&self) -> Result<(), Error> {
+        info!("Make current: {:?}", self.id);
+        let context_class = Class::get("EAGLContext").expect("Failed to get class `EAGLContext`");
+        let res: BOOL = msg_send![context_class, setCurrentContext: self.eagl_context];
+        if res == YES {
+            Ok(())
+        } else {
+            warn!("`EAGLContext setCurrentContext` failed");
+            Err(Error::Failed)
+        }        
     }
 
-    pub unsafe fn make__not_current(&self) {
-        println!("Make not current: {:?}", self.id);
-        let inner = self.glutin_ctx.take();
-        let context = match inner {            
-            ContextInner::Possibly(c) => c.make_not_current().unwrap(),
-            ContextInner::Not(c) => c.make_not_current().unwrap(),
-            NoGlutinContext => panic!("Context not current"),
-        };
-        self.glutin_ctx.replace(ContextInner::Not(context));
+    pub unsafe fn make_no_context_current() -> Result<(), Error> {
+        info!("Make no context current");
+
+        let context_class = Class::get("EAGLContext").expect("Failed to get class `EAGLContext`");
+        let res: BOOL = msg_send![context_class, setCurrentContext: ffi::nil];
+        if res == YES {
+            Ok(())
+        } else {
+            warn!("`EAGLContext setCurrentContext` failed");
+            Err(Error::Failed)
+        }
     }
 
     pub fn get_proc_address(&self, symbol_name: &str) -> *const c_void {
-        let inner = self.glutin_ctx.take();
-        let c = match inner {
-            ContextInner::Possibly(c) => {
-                let addr =  c.get_proc_address(symbol_name);
-                self.glutin_ctx.replace(ContextInner::Possibly(c));
-                addr
-            },
-            _                         => panic!("Context not current: {:?}", inner),
-        };        
-        c
-    }
-
-    // pub fn get_current_context(&self) -> Option<&WindowedContext<PossiblyCurrent>> {
-    //     match *self.inner {
-    //         ContextInner::Possibly(ref c) => Some(c),
-    //         _ => None,
-    //     }
-    // }
+        OPENGLES_FRAMEWORK.with(|framework| unsafe {
+            let symbol_name: CFString = FromStr::from_str(symbol_name).unwrap();
+            CFBundleGetFunctionPointerForName(*framework, symbol_name.as_concrete_TypeRef())
+        })
+    }    
 }
 
 pub struct ContextDescriptor {
@@ -114,32 +118,26 @@ pub struct ContextDescriptor {
 pub struct NativeContext();
 
 impl Device {
+
     pub fn create_context(
         &self,
         descriptor: &ContextDescriptor,
         share_with: Option<&Context>,
     ) -> Result<Context, Error> {
-        let mut next_context_id = CREATE_CONTEXT_MUTEX.lock().unwrap();
-        let cb = ContextBuilder::new().with_gl_profile(GlProfile::Core).with_gl(GlRequest::Latest);
-        let size_one = PhysicalSize::new(1, 1);
-        let el = EventLoop::new();
-        let gl_ctx = match cb.build_headless(&el, size_one) {
-            Ok(ctx) => Ok(ctx),
-            err => Err(Error::Failed),
-        }?;
-    
-        let ctx = Context {
-            id: *next_context_id,
-            glutin_ctx: RefCell::new(ContextInner::Not(gl_ctx)),
-            gl_version: descriptor.gl_version,
-            framebuffer: Framebuffer::None,
-        };
-
-        next_context_id.0 += 1;
-        Ok(ctx)
+        let version = descriptor.gl_version.major;
+        let version = version as ffi::NSUInteger;
+        if version >= ffi::kEAGLRenderingAPIOpenGLES1 && version <= ffi::kEAGLRenderingAPIOpenGLES3 {
+            let ctx = unsafe { Context::create_context(version, descriptor)? };
+            Ok(ctx)
+        } else {
+            warn!(
+                "Specified OpenGL ES version ({:?}) is not availble on iOS. Only 1, 2, and 3 are valid options",
+                version,
+            );
+            Err(Error::Failed)
+        }        
     }
 
-    
     pub fn create_context_descriptor(
         &self,
         attributes: &ContextAttributes,
@@ -184,7 +182,7 @@ impl Device {
     }
 
     pub fn make_no_context_current(&self) -> Result<(), Error> {
-        // context.make__not_current();
+        unsafe { Context::make_no_context_current(); }
         Ok(())
     }
 

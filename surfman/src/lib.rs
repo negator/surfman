@@ -18,7 +18,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[macro_use]
 extern crate objc;
 

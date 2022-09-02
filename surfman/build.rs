@@ -14,9 +14,10 @@ fn main() {
         // Platforms
         windows: { target_os = "windows" },
         macos: { target_os = "macos" },
+        ios: { target_os = "ios" },
         android: { target_os = "android" },
         // TODO: is `target_os = "linux"` the same as the following check?
-        linux: { all(unix, not(any(macos, android))) },
+        linux: { all(unix, not(any(macos, ios, android))) },
 
         // Features:
         // Here we collect the features that are only valid on certain platforms and

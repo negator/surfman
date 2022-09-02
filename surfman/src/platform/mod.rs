@@ -16,6 +16,11 @@ pub use macos::cgl as default;
 #[cfg(macos)]
 pub use macos::system;
 
+#[cfg(ios)]
+pub mod ios;
+#[cfg(ios)]
+pub use ios as default;
+
 #[cfg(linux)]
 pub mod unix;
 #[cfg(linux)]
